@@ -14,6 +14,16 @@ import itertools
 import numpy as np
 import numpy.typing as npt
 
+class BV:
+    '''
+    Wrapper around a Z3 bitvector that allows indexing.
+    '''
+    def __init__(self, bv):
+        self.bv = bv
+    def __getitem__(self, idx: int) -> bool:
+        idx = idx % self.bv.params()[1]
+        return bool(self.bv.as_long() & (1 << idx))
+
 class Solution:
     def __init__(self, width: int):
         self.s = s = z3.Solver()
@@ -67,9 +77,7 @@ class Solution:
         ztarget = z3.BitVecVal(money, self.cell_sort)
         self.s.add(self.guesser(self.flip(zboard, ztarget)) == ztarget)
 
-        any = False
         if self.s.check() == z3.sat:
-            any = True
             m = self.s.model()
             print('Original board:\n', zboard, zboard.sort())
             zflipped = m.evaluate(self.flip(zboard, ztarget))
@@ -107,7 +115,7 @@ def main():
         1,
         args.threads
     ][min(args.threads, 2)]
-    z3.set_param('smt.threads', num_threads)
+    z3.set_param('smt.threads', 1)
 
     W = args.width
     s = Solution(width=W)
