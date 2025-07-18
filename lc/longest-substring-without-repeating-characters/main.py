@@ -17,7 +17,7 @@ class Solver:
         print(f'end {sofar=}')
         return len(sofar)
 
-    def run(self, string: str) -> int:
+    def lengthOfLongestSubstring(self, string: str) -> int:
         longest = 0 if string == '' else 1
         for i, c in enumerate(string):
             print(f'{i=} {c=}')
@@ -29,7 +29,7 @@ class Solver:
     def check(self, input, expect):
         print('-' * 72)
         print(input, expect)
-        assert expect == self.run(input)
+        assert expect == self.lengthOfLongestSubstring(input)
             
 
 if __name__ == "__main__":
