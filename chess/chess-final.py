@@ -85,7 +85,9 @@ class ProofByCaseAnalysis:
         zboard = self.board_to_bitvec(board)
         ztarget = BitVecVal(money, self.cell_sort)
         self.s.add(self.guesser(self.flip(zboard, ztarget)) == ztarget)
+        any = False
         if self.s.check() == sat:
+            any = True
             m = self.s.model()
 
             def pbv(bv: BitVecRef) -> str:
@@ -96,9 +98,9 @@ class ProofByCaseAnalysis:
             zflipped = m.evaluate(self.flip(zboard, ztarget))
             assert isinstance(zflipped, BitVecRef)
             zguess = m.evaluate(self.guesser(zflipped))
+            print(pbv(zboard), pbv(zflipped), zguess, ztarget)
             assert isinstance(zguess, BitVecNumRef)
             assert zguess.as_long() == ztarget.as_long(), 'Guess does not match target'
-            print(pbv(zboard), pbv(zflipped), zguess, ztarget)
             print(self.s.sexpr())
         else:
             print(self.s.unsat_core())
@@ -136,8 +138,8 @@ class ProofByContradiction:
         board_prime = board ^ flip_mask
         guess = self.xor_sum_z3(board_prime, self.board_size)
 
-        null_hypothesis = Not(guess == prize_index)
-        self.s.add(null_hypothesis)
+        counterexample = Not(guess == prize_index)
+        self.s.add(counterexample)
     
         return Result(self.s.check() == unsat, self.s)
 
@@ -161,8 +163,19 @@ def test(board_size: int):
     assert solved
 
 if __name__ == '__main__':
+    test_exhaustive(2)
+    raise SystemExit
     parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--board-size', type=int, default=4)
+    parser.add_argument('-b', '--board-size', type=int, default=4)
+    parser.add_argument('-o', '--output', type=str, default=None, help='Output file for the SMT solution.')
+    parser.add_argument(
+        "-f",
+        "--format",
+        type=str,
+        default="sexpr",
+        choices=["sexpr", "smt2"],
+        help="Output format for the SMT solution.",
+    )
     parser.add_argument(
         "--sexpr",
         action="store_true",
@@ -175,7 +188,8 @@ if __name__ == '__main__':
 
     solved, solver = s()
     print(f'{solved=}')
+    if args.output:
+        with open(args.output, 'w') as f:
+            f.write(solver.sexpr() if args.format == 'sexpr' else solver.to_smt2())
     if args.sexpr:
         print(solver.sexpr())
-    else:
-        print(f'Failed to solve: {solver.unsat_core()=}')

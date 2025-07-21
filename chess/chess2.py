@@ -8,7 +8,9 @@ Player 1 enters the room, flips exactly one coin of their choosing, and then lea
 Player 2 then enters and must choose the square where the prize is hidden.
 """
 
+import pytest
 import z3
+import argparse
 import math
 import itertools
 import numpy as np
@@ -69,22 +71,50 @@ class Solution:
             bv |= int(bool(b)) << i
         return bv
 
+    def print_bv(self, bv: z3.BitVecNumRef):
+        print(bv.as_binary_string().zfill(bv.size()))
+
+
+    def add(self, board: npt.NDArray[np.uint], money: int):
+        board_constraint = self.board_to_bitvec(board)
+        target_constraint = z3.BitVecVal(money, self.cell_sort)
+        self.s.add(
+            self.guesser(self.flip(board_constraint, target_constraint))
+            == target_constraint
+        )
+
+    def solve(self, board: npt.NDArray[np.uint]):
+        board_value = self.board_to_bitvec(board)
+        assert self.s.check() == z3.sat, 'No solution found'
+        m = self.s.model()
+        guess = m.evaluate(self.guesser(board_value))
+        assert isinstance(guess, z3.BitVecNumRef)
+        return guess.as_long()
 
     def solutions(self, board: npt.NDArray[np.uint], money: int):
         assert len(board) == len(board[0]) == self.W, 'Board must be square'
 
         zboard = self.board_to_bitvec(board)
         ztarget = z3.BitVecVal(money, self.cell_sort)
-        self.s.add(self.guesser(self.flip(zboard, ztarget)) == ztarget)
+        z3.set_param('smt.threads', self.threads)
 
         if self.s.check() == z3.sat:
             m = self.s.model()
-            print('Original board:\n', zboard, zboard.sort())
+            # import pdb; pdb.set_trace()
+            zbv = m.evaluate(zboard)
+            assert isinstance(zbv, z3.BitVecNumRef)
+            print('Original board:')
+            self.print_bv(zbv)
             zflipped = m.evaluate(self.flip(zboard, ztarget))
+            assert isinstance(zflipped, z3.BitVecNumRef)
             zguess = m.evaluate(self.guesser(zflipped))
-            print('Flipped board:\n', zflipped)
-            print('Guess:\n', zguess)
-            print('Target:\n', ztarget)
+            print('Flipped board:')
+            self.print_bv(zflipped)
+            print('Guess:')
+            assert isinstance(zguess, z3.BitVecNumRef)
+            print(zguess.as_long())
+            print('Target:')
+            print(ztarget.as_long())
             assert isinstance(zguess, z3.BitVecNumRef)
             assert zguess.as_long() == ztarget.as_long(), 'Guess does not match target'
             # yield m.evaluate(a_board).as_long(), m.evaluate(a_cell).as_long()
@@ -96,27 +126,8 @@ class Solution:
 
         return True
 
-
-def main():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--threads",
-        type=int,
-        default=16,
-        help="Number of threads to use. 1 means no parallelization, 0 means use all available cores.",
-    )
-    parser.add_argument('--width', type=int, default=4)
-    args = parser.parse_args()
-
-    import os
-    num_threads = [
-        os.cpu_count() or 1,
-        1,
-        args.threads
-    ][min(args.threads, 2)]
-    z3.set_param('smt.threads', 1)
-
+@pytest.mark.parametrize('args', [argparse.Namespace(width=2)])
+def test(args: argparse.Namespace):
     W = args.width
     s = Solution(width=W)
     all_boards = list(itertools.product([0, 1], repeat=W*W))
@@ -127,7 +138,21 @@ def main():
         for money in range(W*W):  # Try all possible 'money' values for a 2x2 board
             print(f"Solving for money = {money}")
             # s2 = Solution(width=2)  # New solver for each case to avoid constraint pollution
-            print(s.solutions(board, money))
+            print(s.add(board, money))
+            assert s.solve(board) == money, 'Solution does not match target'
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        help="Number of threads to use. 1 means no parallelization, 0 means use all available cores.",
+    )
+    parser.add_argument('--width', type=int, default=4)
+    args = parser.parse_args()
+    test(args)
+
 
 if __name__ == '__main__':
     main()
